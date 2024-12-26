@@ -22,10 +22,11 @@ MAX_NUMBER_FILES = 50
 class _GoogleDriveFile(object):
     TYPE_FOLDER = "application/vnd.google-apps.folder"
 
-    def __init__(self, id, name, type, children=None):
+    def __init__(self, id, name, type, url, children=None):
         self.id = id
         self.name = name
         self.type = type
+        self.url = url
         self.children = children if children is not None else []
 
     def is_folder(self):
@@ -83,10 +84,11 @@ def _parse_google_drive_file(url, content):
         id=url.split("/")[-1],
         name=name,
         type=_GoogleDriveFile.TYPE_FOLDER,
+        url=url
     )
 
     id_name_type_iter = [
-        (e[0], e[2].encode("raw_unicode_escape").decode("utf-8"), e[3])
+        (e[0], e[2].encode("raw_unicode_escape").decode("utf-8"), e[3], [i for i in e if type(i) == str and i.startswith('http')][0])
         for e in folder_contents
     ]
 
@@ -130,7 +132,7 @@ def _download_and_parse_google_drive_link(
         content=res.text,
     )
 
-    for child_id, child_name, child_type in id_name_type_iter:
+    for child_id, child_name, child_type, child_url in id_name_type_iter:
         if child_type != _GoogleDriveFile.TYPE_FOLDER:
             if not quiet:
                 print(
@@ -143,6 +145,7 @@ def _download_and_parse_google_drive_link(
                     id=child_id,
                     name=child_name,
                     type=child_type,
+                    url=child_url
                 )
             )
             if not return_code:
@@ -157,7 +160,7 @@ def _download_and_parse_google_drive_link(
             )
         return_code, child = _download_and_parse_google_drive_link(
             sess=sess,
-            url="https://drive.google.com/drive/folders/" + child_id,
+            url=child_url if child_url else "https://drive.google.com/drive/folders/" + child_id,
             quiet=quiet,
             remaining_ok=remaining_ok,
         )
@@ -184,11 +187,11 @@ def _get_directory_structure(gdrive_file, previous_path):
     for file in gdrive_file.children:
         file.name = file.name.replace(osp.sep, "_")
         if file.is_folder():
-            directory_structure.append((None, osp.join(previous_path, file.name)))
+            directory_structure.append((None, osp.join(previous_path, file.name), file.url))
             for i in _get_directory_structure(file, osp.join(previous_path, file.name)):
                 directory_structure.append(i)
         elif not file.children:
-            directory_structure.append((file.id, osp.join(previous_path, file.name)))
+            directory_structure.append((file.id, osp.join(previous_path, file.name), file.url))
     return directory_structure
 
 
@@ -300,7 +303,7 @@ def download_folder(
         os.makedirs(root_dir)
 
     files = []
-    for id, path in directory_structure:
+    for id, path, url_resource_key in directory_structure:
         local_path = osp.join(root_dir, path)
 
         if id is None:  # folder

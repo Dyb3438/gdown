@@ -45,6 +45,7 @@ def file_size(argv):
 
 
 def main():
+    print('This version is updated by Su.Yongyi. It has supported the url with resource key.')
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
